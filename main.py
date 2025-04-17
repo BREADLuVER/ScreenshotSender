@@ -8,6 +8,15 @@ import mss
 import ctypes
 from PIL import Image
 import io
+import openai
+import base64
+from pathlib import Path
+from datetime import datetime
+
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+conversation_history = []
+DEFAULT_PROMPT = "Describe this image in 1 sentence"
 
 # Folder to store screenshots temporarily
 SCREENSHOT_DIR = "screenshots"
@@ -31,6 +40,59 @@ if not is_admin():
     print("⚠️ Please run this script as Administrator to capture all windows.")
 else:
     print("yes")
+
+LOG_FILE = "gpt_responses_log.txt"
+
+def log_response(image_path, prompt, reply):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    filename = os.path.basename(image_path)
+
+    with open(LOG_FILE, "a", encoding="utf-8") as log:
+        log.write(f"[{timestamp}] Screenshot: {filename}\n")
+        log.write(f"Prompt: {prompt}\n")
+        log.write(f"Response:\n{reply}\n")
+        log.write("-" * 40 + "\n\n")
+        
+def send_to_openai(image_path, prompt=DEFAULT_PROMPT):
+    try:
+        with open(image_path, "rb") as image_file:
+            encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
+
+        # Append user message (image + text) to the conversation
+        conversation_history.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{encoded_image}",
+                        "detail": "low"
+                    }
+                }
+            ]
+        })
+
+        response = openai.chat.completions.create(
+            model="gpt-4-vision-preview",
+            messages=conversation_history,
+            max_tokens=100,
+            temperature=0.5
+        )
+
+        reply = response.choices[0].message.content
+        print(f"[OpenAI] Response: {reply}")
+
+        # Append assistant reply to conversation
+        conversation_history.append({
+            "role": "assistant",
+            "content": reply
+        })
+
+        log_response(image_path, prompt, reply)
+
+    except Exception as e:
+        print(f"[OpenAI] Error: {e}")
 
 # Take a screenshot using `mss`
 def take_screenshot():
@@ -71,29 +133,19 @@ def clear_screenshots():
 # Send all stored screenshots to the API
 def send_screenshots():
     if not screenshot_paths:
-        print("[F2] No screenshots to send.")
+        print("[Ctrl+X] No screenshots to send.")
         return
 
-    print(f"[F2] Sending {len(screenshot_paths)} screenshot(s) to API...")
+    print(f"[Ctrl+X] Sending {len(screenshot_paths)} screenshot(s)...")
 
-    files = []
     for path in screenshot_paths:
-        with open(path, 'rb') as f:
-            files.append(('files', (os.path.basename(path), f, 'image/png')))
+        send_to_openai(path)
 
-    try:
-        response = requests.post(API_URL, files=files)
-        print(f"[F2] Response status: {response.status_code}")
-        print(f"[F2] Response body: {response.text[:200]}...")
-
-        # Clear screenshots after sending
-        for path in screenshot_paths:
-            os.remove(path)
-        screenshot_paths.clear()
-        print("[F2] All screenshots sent and cleared.")
-
-    except Exception as e:
-        print(f"[F2] Error sending screenshots: {e}")
+    # Optionally clear after sending
+    for path in screenshot_paths:
+        os.remove(path)
+    screenshot_paths.clear()
+    print("[Ctrl+X] Sent and cleared.")
 
 # Background listener for F1 and F2
 def keyboard_listener():
