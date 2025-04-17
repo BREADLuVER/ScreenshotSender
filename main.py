@@ -12,7 +12,18 @@ import openai
 import base64
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+import overlay_popup
+load_dotenv()
 
+overlay = overlay_popup.OverlayManager()
+overlay.start()
+
+# Register toggle
+keyboard.add_hotkey("F2", overlay.toggle)
+
+# Use this anywhere:
+overlay.show_message("Hello from GPT!")
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 conversation_history = []
@@ -74,13 +85,14 @@ def send_to_openai(image_path, prompt=DEFAULT_PROMPT):
         })
 
         response = openai.chat.completions.create(
-            model="gpt-4-vision-preview",
+            model="gpt-4o",
             messages=conversation_history,
             max_tokens=100,
             temperature=0.5
         )
 
         reply = response.choices[0].message.content
+        overlay.show_message(reply)
         print(f"[OpenAI] Response: {reply}")
 
         # Append assistant reply to conversation
@@ -159,7 +171,7 @@ def keyboard_listener():
     keyboard.add_hotkey('ctrl+x', send_screenshots)
     keyboard.add_hotkey('ctrl+c', clear_screenshots)
 
-    keyboard.wait('esc')
+    keyboard.wait('ctrl+shift+k')
     print("❌ Exiting...")
 
 if __name__ == "__main__":

@@ -2,3 +2,5 @@ keyboard
 mss
 requests
 Pillow
+python-dotenv
+PyQt5
