@@ -23,11 +23,11 @@ overlay.start()
 keyboard.add_hotkey("F2", overlay.toggle)
 
 # Use this anywhere:
-overlay.show_message("Hello from GPT!")
+overlay.show_message("This is a very long message from GPT. " * 10)
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 conversation_history = []
-DEFAULT_PROMPT = "Describe this image in 1 sentence"
+DEFAULT_PROMPT = "solve the coding question"
 
 # Folder to store screenshots temporarily
 SCREENSHOT_DIR = "screenshots"
