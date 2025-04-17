@@ -13,7 +13,7 @@ class OverlayWindow(QtWidgets.QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.setFixedSize(1000, 350)
+        self.setFixedSize(1000, 1000)
         self.setWindowFlags(
             QtCore.Qt.FramelessWindowHint |
             QtCore.Qt.WindowStaysOnTopHint |
@@ -23,25 +23,38 @@ class OverlayWindow(QtWidgets.QWidget):
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setFocus()
 
-        self.setGeometry(1400, 500, 1000, 350)
+        self.setGeometry(1200, 300, 1000, 1000)
 
         self.background = QtWidgets.QFrame(self)
-        self.background.setGeometry(0, 0, 1000, 350)  # Match the full size
-        self.background.setStyleSheet("background-color: rgba(0, 0, 0, 180); border-radius: 10px;")
+        self.background.setGeometry(0, 0, 1000, 1000)  # Match the full size
+        self.background.setStyleSheet("background-color: rgba(0, 0, 0, 50); border-radius: 10px;")
 
-        self.label = QtWidgets.QLabel(self.background)
-        self.label.setGeometry(10, 10, 980, 240)  # Much taller and wider
+        self.scroll_area = QtWidgets.QScrollArea(self.background)
+        self.scroll_area.setGeometry(10, 10, 980, 900)
+        self.scroll_area.setStyleSheet("border: none;")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+
+        self.label = QtWidgets.QLabel()
         self.label.setStyleSheet("""
+            background-color: transparent;
             color: white;
             font-size: 16px;
             padding: 5px;
         """)
+        shadow = QtWidgets.QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(10)
+        shadow.setColor(QtCore.Qt.black)
+        shadow.setOffset(1, 1)
+        self.label.setGraphicsEffect(shadow)
         self.label.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
         self.label.setWordWrap(True)
         self.label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
 
+        self.scroll_area.setWidget(self.label)
+
         self.input = QtWidgets.QLineEdit(self.background)
-        self.input.setGeometry(10, 265, 800, 40)  # Bigger input box
+        self.input.setGeometry(10, 920, 800, 70)
         self.input.setStyleSheet("""
             background-color: white;
             border-radius: 5px;
@@ -50,7 +63,7 @@ class OverlayWindow(QtWidgets.QWidget):
         """)
 
         self.send_button = QtWidgets.QPushButton("Send", self.background)
-        self.send_button.setGeometry(820, 265, 160, 40)
+        self.send_button.setGeometry(820, 920, 160, 70)
         self.send_button.setStyleSheet("""
             background-color: #4CAF50;
             color: white;
@@ -63,7 +76,10 @@ class OverlayWindow(QtWidgets.QWidget):
 
     @QtCore.pyqtSlot(str)
     def update_text(self, message):
-        self.label.setText(message)
+        previous = self.label.text()
+        self.label.setText(previous + "\n\n" + message)
+        QtCore.QTimer.singleShot(0, lambda: self.scroll_area.verticalScrollBar().setValue(
+        self.scroll_area.verticalScrollBar().maximum()))
         self.setVisible(True)
         self.raise_()
         self.activateWindow()
@@ -104,7 +120,10 @@ class OverlayWindow(QtWidgets.QWidget):
 
 
 class OverlayManager:
-    def __init__(self):
+    def __init__(self, conversation_history, openai, log_response):
+        self.conversation_history = conversation_history
+        self.openai = openai
+        self.log_response = log_response
         self.app = None
         self.window = None
         self.ready_event = threading.Event()
@@ -136,31 +155,33 @@ class OverlayManager:
         threading.Thread(target=self._send_text_to_openai, args=(prompt,), daemon=True).start()
 
     def _send_text_to_openai(self, prompt):
-        from main import conversation_history, overlay, log_response, openai
-
-        # Append prompt to history
-        conversation_history.append({
+        self.conversation_history.append({
             "role": "user",
             "content": prompt
         })
 
         try:
-            response = openai.chat.completions.create(
+            response = self.openai.chat.completions.create(
                 model="gpt-4o",
-                messages=conversation_history,
+                messages=self.conversation_history,
                 max_tokens=150,
                 temperature=0.5
             )
 
             reply = response.choices[0].message.content
-            conversation_history.append({
+            self.conversation_history.append({
                 "role": "assistant",
                 "content": reply
             })
 
-            self.show_message(f"🧑 {prompt}\n\n🤖 {reply}")
-            print(f"[OpenAI Follow-up] {reply}")
+            full_text = f"🧑 {prompt}\n\n🤖 {reply}"
+            self.show_message(full_text)
+
+            # Optional log
+            self.log_response("[typed prompt]", prompt, reply)
 
         except Exception as e:
             self.show_message(f"[Error] {e}")
+
+
 

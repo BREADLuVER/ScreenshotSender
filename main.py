@@ -16,15 +16,6 @@ from dotenv import load_dotenv
 import overlay_popup
 load_dotenv()
 
-overlay = overlay_popup.OverlayManager()
-overlay.start()
-
-# Register toggle
-keyboard.add_hotkey("F2", overlay.toggle)
-
-# Use this anywhere:
-overlay.show_message("This is a very long message from GPT. " * 10)
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 conversation_history = []
 DEFAULT_PROMPT = "solve the coding question"
@@ -63,7 +54,21 @@ def log_response(image_path, prompt, reply):
         log.write(f"Prompt: {prompt}\n")
         log.write(f"Response:\n{reply}\n")
         log.write("-" * 40 + "\n\n")
-        
+
+overlay = overlay_popup.OverlayManager(
+    conversation_history=conversation_history,
+    openai=openai,
+    log_response=log_response
+)
+
+overlay.start()
+
+# Register toggle
+keyboard.add_hotkey("F2", overlay.toggle)
+
+# Use this anywhere:
+overlay.show_message("This is a very long message from GPT. " * 1000)
+
 def send_to_openai(image_path, prompt=DEFAULT_PROMPT):
     try:
         with open(image_path, "rb") as image_file:
@@ -119,11 +124,11 @@ def take_screenshot():
         img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
 
         # Resize (e.g., scale to 50%)
-        new_size = (int(img.width * 0.5), int(img.height * 0.5))
+        new_size = (int(img.width * 0.7), int(img.height * 0.7))
         img = img.resize(new_size, Image.LANCZOS)
 
         # Save with compression (JPEG quality: 30)
-        img.save(filepath, "JPEG", quality=60, optimize=True)
+        img.save(filepath, "JPEG", quality=90, optimize=True)
 
     screenshot_paths.append(filepath)
     print(f"[Ctrl+Z] Screenshot saved: {filepath} ({new_size[0]}x{new_size[1]})")
