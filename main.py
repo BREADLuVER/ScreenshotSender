@@ -30,7 +30,7 @@ API_URL = "https://httpbin.org/post"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 # List to keep track of saved screenshot paths
-screenshot_paths = []
+screenshot_paths: list[str] = [] 
 
 def is_admin():
     try:
@@ -58,7 +58,8 @@ def log_response(image_path, prompt, reply):
 overlay = overlay_popup.OverlayManager(
     conversation_history=conversation_history,
     openai=openai,
-    log_response=log_response
+    log_response=log_response,
+    screenshot_paths=screenshot_paths
 )
 
 overlay.start()
@@ -67,7 +68,7 @@ overlay.start()
 keyboard.add_hotkey("F2", overlay.toggle)
 
 # Use this anywhere:
-overlay.show_message("This is a very long message from GPT. " * 1000)
+overlay.show_message("This is a very long message from GPT. " * 1)
 
 def send_to_openai(image_path, prompt=DEFAULT_PROMPT):
     try:
@@ -113,26 +114,30 @@ def send_to_openai(image_path, prompt=DEFAULT_PROMPT):
 
 # Take a screenshot using `mss`
 def take_screenshot():
-    filename = f"{uuid.uuid4()}.jpg"  # Use JPG for smaller file size
+    # 1) Hide overlay completely so no capture ever sees it
+    if overlay.window:
+        overlay.window.hide()
+
+    # 2) Give DWM time to recompose without your window
+    time.sleep(0.2)
+
+    # 3) Do the mss grab as before
+    filename = f"{uuid.uuid4()}.jpg"
     filepath = os.path.join(SCREENSHOT_DIR, filename)
-
     with mss.mss() as sct:
-        monitor = sct.monitors[2]  # Change to your preferred monitor
+        monitor = sct.monitors[2]
         sct_img = sct.grab(monitor)
-
-        # Convert raw screenshot to Pillow Image
         img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-
-        # Resize (e.g., scale to 50%)
-        new_size = (int(img.width * 0.7), int(img.height * 0.7))
-        img = img.resize(new_size, Image.LANCZOS)
-
-        # Save with compression (JPEG quality: 30)
+        img = img.resize((int(img.width * 0.7), int(img.height * 0.7)), Image.LANCZOS)
         img.save(filepath, "JPEG", quality=90, optimize=True)
 
-    screenshot_paths.append(filepath)
-    print(f"[Ctrl+Z] Screenshot saved: {filepath} ({new_size[0]}x{new_size[1]})")
+    # 4) Restore your overlay immediately
+    if overlay.window:
+        overlay.window.show()
 
+    screenshot_paths.append(filepath)
+    print(f"[Ctrl+Z] Screenshot saved: {filepath} ({img.width}x{img.height})")
+    
 def clear_screenshots():
     if not screenshot_paths:
         print("[Clear] No screenshots to delete.")
@@ -174,7 +179,7 @@ def keyboard_listener():
 
     keyboard.add_hotkey('ctrl+z', take_screenshot)
     keyboard.add_hotkey('ctrl+x', send_screenshots)
-    keyboard.add_hotkey('ctrl+c', clear_screenshots)
+    keyboard.add_hotkey('ctrl+shift+c', clear_screenshots)
 
     keyboard.wait('ctrl+shift+k')
     print("❌ Exiting...")
